@@ -115,3 +115,59 @@ async def test_oversell_prevention_concurrent(client: AsyncClient):
     assert 201 in statuses, "At least one checkout should succeed"
     assert 409 in statuses or 400 in statuses, "The other checkout should fail (no stock)"
     assert statuses.count(201) == 1, "Exactly one checkout should succeed — no oversell"
+
+
+@pytest.mark.asyncio
+async def test_get_order_returns_persisted_order(client: AsyncClient):
+    """A successful checkout should produce an order retrievable via GET /orders/{id}."""
+    user_id = await _seed_user(client, "buyer-get")
+    product_id = await _seed_product(client, stock=4)
+    session_id = f"order-get-{product_id}"
+
+    await client.post(f"/cart/{session_id}/items", json={"product_id": product_id, "quantity": 2})
+    checkout = await client.post(
+        "/orders/checkout", json={"session_id": session_id, "user_id": user_id}
+    )
+    assert checkout.status_code == 201
+    order_id = checkout.json()["id"]
+
+    fetched = await client.get(f"/orders/{order_id}")
+    assert fetched.status_code == 200
+    body = fetched.json()
+    assert body["id"] == order_id
+    assert body["user_id"] == user_id
+    assert len(body["items"]) == 1
+    assert body["items"][0]["product_id"] == product_id
+    assert body["items"][0]["quantity"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_order_not_found(client: AsyncClient):
+    resp = await client.get("/orders/999999999")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_checkout_invalidates_product_cache(client: AsyncClient, redis_client):
+    """After checkout, the product's cache entry must be deleted so the next GET
+    reflects the decremented stock instead of returning a stale cached value."""
+    user_id = await _seed_user(client, "buyer-cache")
+    product_id = await _seed_product(client, stock=5)
+    session_id = f"checkout-cache-{product_id}"
+
+    # Warm the cache so we can prove it gets invalidated
+    await client.get(f"/products/{product_id}")
+    assert await redis_client.get(f"product:{product_id}") is not None
+
+    await client.post(f"/cart/{session_id}/items", json={"product_id": product_id, "quantity": 2})
+    checkout = await client.post(
+        "/orders/checkout", json={"session_id": session_id, "user_id": user_id}
+    )
+    assert checkout.status_code == 201
+
+    cached = await redis_client.get(f"product:{product_id}")
+    assert cached is None, "Product cache must be invalidated after checkout"
+
+    # Next read should reflect the new stock (5 - 2 = 3) from PostgreSQL
+    refreshed = await client.get(f"/products/{product_id}")
+    assert refreshed.json()["stock"] == 3

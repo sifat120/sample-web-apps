@@ -1,0 +1,78 @@
+# =============================================================
+# embr.yaml — Embr deployment config for the e-commerce platform
+#
+# Deploys the FastAPI backend AND the built React/Vite frontend
+# from a single service. The Vite bundle is built into
+# frontend/dist during the build phase; Embr's static-asset
+# extractor serves it from CDN, and all non-static paths
+# (/api/*, /health, /products, /orders, ...) are forwarded to
+# the FastAPI container.
+#
+# MANAGED BY EMBR
+#   - PostgreSQL  (database.enabled)
+#   - Valkey      (cache.enabled — Redis-compatible)
+#
+# NOT MANAGED BY EMBR — set these as environment variables on the
+# Embr service (ES/Blob/RabbitMQ are external hosted services):
+#   - ELASTICSEARCH_URL           (+ ES_USERNAME/ES_PASSWORD or ES_API_KEY)
+#   - AZURE_STORAGE_CONNECTION_STRING
+#   - AZURE_STORAGE_CONTAINER
+#   - RABBITMQ_URL
+#   - SECRET_KEY                  (strong random 64-char hex)
+#   - APP_ENV=production
+#
+# NOTE: workers/order_worker.py is a separate background process
+# and is not started by this service. To run it on Embr, create a
+# second service with `healthCheck.enabled: false` and
+# `run.startCommand: "python -m workers.order_worker"`.
+# =============================================================
+
+platform: python
+platformVersion: "3.11"
+
+# Custom buildCommand bypasses Oryx auto-detection because we need
+# a two-stage build: Node for the frontend, then Python for the API.
+buildCommand: |
+  set -e
+  cd frontend && npm ci && npm run build && cd ..
+  pip install --no-cache-dir -r requirements.txt
+
+autoDeploy: true
+
+run:
+  port: 8000
+  startCommand: "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+database:
+  # Provision a managed PostgreSQL instance. Embr injects the
+  # connection string; the app reads POSTGRES_URL from config.py.
+  enabled: true
+
+cache:
+  # Provision a managed Valkey (Redis-compatible) cache. Embr
+  # injects REDIS_URL, which is already consumed by app/cache.py.
+  enabled: true
+  mode: embedded
+  maxMemory: 256
+  evictionPolicy: allkeys-lru
+
+static:
+  # Vite writes the production bundle to frontend/dist. Embr
+  # uploads it to CDN-backed blob storage and routes matching
+  # paths there; everything else goes to the FastAPI container.
+  directories:
+    - frontend/dist
+  spaFallback: true
+  headers:
+    "*.js": "public, max-age=31536000, immutable"
+    "*.css": "public, max-age=31536000, immutable"
+    "*.woff2": "public, max-age=31536000, immutable"
+    "*.ico": "public, max-age=86400"
+    "index.html": "no-cache"
+
+healthCheck:
+  # FastAPI exposes GET /health which pings Postgres, Valkey, and
+  # Elasticsearch. Returns 200 when all three are reachable.
+  enabled: true
+  path: "/health"
+  expectedStatusCode: 200

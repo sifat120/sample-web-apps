@@ -170,7 +170,7 @@ After placing an order you will see the worker print:
 
 ## Running Tests
 
-The repository ships with **29 automated tests** that exercise every backing service against the real local Docker stack — not mocks.
+The repository ships with **54 automated tests** (plus 5 opt-in cloud tests) that exercise every backing service against the real local Docker stack — not mocks.
 
 ### One-time setup
 
@@ -190,8 +190,21 @@ pip install -r requirements.txt
 
 ```bash
 pytest tests/ -v
-# → 29 passed in ~2s
+# → 54 passed, 5 skipped in ~6s
 ```
+
+### Run in parallel (recommended for re-runs)
+
+The suite is configured to run safely in parallel via `pytest-xdist`:
+
+```bash
+pytest tests/ -n auto         # one worker per CPU core
+```
+
+Tests that share a single global resource (the RabbitMQ `orders` queue) are
+serialized onto one worker via `@pytest.mark.xdist_group(name="rabbitmq")`,
+so cross-worker collisions are impossible. All other tests are fully isolated
+through UUID-based emails / cart session ids / blob keys.
 
 ### Run a subset
 
@@ -199,7 +212,23 @@ pytest tests/ -v
 pytest tests/test_e2e_purchase.py -v          # full end-to-end purchase flow
 pytest tests/ -v -k "cache or cart"           # any test whose name matches
 pytest tests/test_storage_and_images.py -v    # Azure Blob (Azurite) image roundtrip only
+pytest tests/test_azure_storage.py -v         # Azurite edge cases (10 tests)
 ```
+
+### Opt in to real-Azure cloud tests
+
+Five tests live in `tests/test_azure_cloud.py` and are **skipped by default**.
+They hit a real Azure Storage account over HTTPS to verify the same code paths
+that run locally against Azurite still work in production. To run them:
+
+```bash
+$env:AZURE_STORAGE_CONNECTION_STRING = "<your real Azure connection string>"
+$env:AZURE_CLOUD_TESTS = "1"
+pytest tests/test_azure_cloud.py -v
+```
+
+If `AZURE_STORAGE_CONNECTION_STRING` still points at Azurite (`devstoreaccount1`,
+`localhost`, `127.0.0.1`) the cloud tests self-skip as a safety net.
 
 ### What each test file covers
 
@@ -210,10 +239,13 @@ pytest tests/test_storage_and_images.py -v    # Azure Blob (Azurite) image round
 | `test_products.py` | create, cache miss → hit cycle, cache invalidation on update, search + price filter, 404 |
 | `test_autocomplete.py` | Elasticsearch completion suggester returns newly-indexed names |
 | `test_storage_and_images.py` | upload bytes → presigned URL → re-download proves bytes match; 404 paths |
+| `test_azure_storage.py` | Azure Blob / Azurite edge cases: idempotent container, SAS params, overwrite, Content-Type, special chars, expiry, concurrency |
+| `test_azure_cloud.py` | Real-Azure tests over HTTPS (skipped unless `AZURE_CLOUD_TESTS=1`) |
 | `test_cart.py` | add/remove/clear, TTL is set on the cart hash, invalid product 404 |
 | `test_checkout.py` | happy path, insufficient stock 409, empty cart 400, cart cleared, **concurrent oversell prevention** |
 | `test_queue_publish.py` | checkout publishes the expected `order.created` message to RabbitMQ |
 | `test_e2e_purchase.py` | one test exercises the **whole stack** in 10 explicit steps (PostgreSQL + Elasticsearch + Azurite + Valkey + RabbitMQ) |
+| `test_search_auth_config.py` | Elasticsearch client config (auth, TLS) is wired correctly |
 
 > Tests use unique UUID-based emails and cart session ids, so they are safe to re-run repeatedly without resetting the database.
 

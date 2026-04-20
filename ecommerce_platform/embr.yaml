@@ -32,16 +32,41 @@ platformVersion: "3.11"
 
 # Custom buildCommand bypasses Oryx auto-detection because we need
 # a two-stage build: Node for the frontend, then Python for the API.
+#
+# Embr runs this in /app (the cloned repo). Anything the runtime
+# needs MUST be copied into /output — that's the directory Embr
+# ships to the runtime container and that static-asset extraction
+# scans. Python dependencies are vendored to /output/site-packages
+# and exposed at runtime via PYTHONPATH (the runtime image's
+# system site-packages from build is not carried over).
 buildCommand: |
-  set -e
+  set -eux
+  # Install Node.js 20 and ensure pip is available — the build
+  # sandbox is minimal and doesn't ship npm or pip on PATH.
+  apt-get update
+  apt-get install -y --no-install-recommends curl ca-certificates python3-pip
+  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  apt-get install -y --no-install-recommends nodejs
+
+  # Build the React/Vite frontend.
   cd frontend && npm ci && npm run build && cd ..
-  pip install --no-cache-dir -r requirements.txt
+
+  # Stage everything the runtime needs into /output. Embr ships
+  # /output to the runtime container; anything not copied here is
+  # not present at runtime.
+  mkdir -p /output/frontend
+  cp -r frontend/dist /output/frontend/dist
+  cp -r app workers /output/
+  cp requirements.txt /output/
+
+  # Vendor Python deps so they survive into the runtime image.
+  python3 -m pip install --no-cache-dir --target /output/site-packages -r requirements.txt
 
 autoDeploy: true
 
 run:
   port: 8000
-  startCommand: "uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  startCommand: "PYTHONPATH=/app/site-packages python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
 database:
   # Provision a managed PostgreSQL instance. Embr injects the
@@ -57,9 +82,11 @@ cache:
   evictionPolicy: allkeys-lru
 
 static:
-  # Vite writes the production bundle to frontend/dist. Embr
-  # uploads it to CDN-backed blob storage and routes matching
-  # paths there; everything else goes to the FastAPI container.
+  # Vite writes the production bundle to frontend/dist, which the
+  # buildCommand copies to /output/frontend/dist. Static.directories
+  # paths are relative to /output. Embr uploads matching files to
+  # CDN-backed blob storage and routes them there; everything else
+  # goes to the FastAPI container.
   directories:
     - frontend/dist
   spaFallback: true

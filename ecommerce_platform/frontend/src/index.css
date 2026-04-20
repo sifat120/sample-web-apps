@@ -1,0 +1,16 @@
+/* Tailwind's three layers — must appear in this order */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smooth scrolling throughout the app */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Remove the default outline and replace with a visible indigo ring
+   so keyboard navigation is still accessible */
+*:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}

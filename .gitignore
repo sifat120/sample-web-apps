@@ -1,0 +1,60 @@
+# =============================================================
+# Root-level .gitignore for the web app samples repository.
+# One file covers all app directories — add a section per app
+# as new ones are implemented.
+# =============================================================
+
+# ----- Secrets & environment variables (NEVER commit these) -----
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ----- Node.js (for future apps) -----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnp/
+
+# ----- Docker / local data volumes -----
+# Mounted data directories that docker-compose writes to locally
+**/postgres_data/
+**/minio_data/
+**/redis_data/
+**/es_data/
+
+# ----- IDE -----
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# =============================================================
+# Per-app sections
+# =============================================================
+
+# ----- ecommerce_platform -----
+ecommerce_platform/.env
+ecommerce_platform/.venv/
+ecommerce_platform/__pycache__/

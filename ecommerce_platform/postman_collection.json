@@ -1,0 +1,290 @@
+{
+  "info": {
+    "name": "ShopLocal — E-Commerce Platform",
+    "description": "Full collection of every endpoint exposed by the FastAPI backend.\n\nHow to use:\n1. Import this file in Postman (File → Import).\n2. Make sure the `baseUrl` collection variable points at your running backend (default `http://localhost:8000`).\n3. After running 'Create user' and 'Create product', the responses' `id` fields are automatically captured into the `userId` and `productId` collection variables, so the cart + checkout requests work end-to-end without any manual editing.\n\nA `sessionId` variable is generated once per import and reused across cart/checkout requests so they stay consistent.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",   "value": "http://localhost:8000", "type": "string" },
+    { "key": "sessionId", "value": "postman-session-1",      "type": "string" },
+    { "key": "userId",    "value": "",                       "type": "string" },
+    { "key": "productId", "value": "",                       "type": "string" },
+    { "key": "orderId",   "value": "",                       "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "POST /users — create user",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('userId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alice@example.com\",\n  \"name\": \"Alice\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] }
+          }
+        },
+        {
+          "name": "GET /users/{id}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/{{userId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{userId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "POST /products — create product",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('productId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Trail Shoes\",\n  \"description\": \"Lightweight trail runners\",\n  \"category\": \"footwear\",\n  \"price\": 119.99,\n  \"stock\": 25\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] }
+          }
+        },
+        {
+          "name": "GET /products/{id} — cache-aside",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            },
+            "description": "First call: cache miss (PostgreSQL). Re-send within 60s: cache hit (Valkey)."
+          }
+        },
+        {
+          "name": "PUT /products/{id} — update (invalidates cache)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 99.99,\n  \"stock\": 30\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET /products/search",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/search?q=trail&category=footwear&min_price=20&max_price=200",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "search"],
+              "query": [
+                { "key": "q",         "value": "trail" },
+                { "key": "category",  "value": "footwear" },
+                { "key": "min_price", "value": "20" },
+                { "key": "max_price", "value": "200" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /products/search/autocomplete",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/search/autocomplete?q=tra",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "search", "autocomplete"],
+              "query": [{ "key": "q", "value": "tra" }]
+            }
+          }
+        },
+        {
+          "name": "POST /products/{id}/image — upload",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Pick any image file from your disk."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}/image",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}", "image"]
+            }
+          }
+        },
+        {
+          "name": "GET /products/{id}/image-url — pre-signed URL",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}/image-url",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}", "image-url"]
+            },
+            "description": "Returns a temporary signed URL pointing at MinIO/S3. Open it in a browser to download the file directly — the API server never touches the bytes."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        {
+          "name": "POST /cart/{sessionId}/items — add item",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": {{productId}},\n  \"quantity\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cart/{{sessionId}}/items",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "{{sessionId}}", "items"]
+            }
+          }
+        },
+        {
+          "name": "GET /cart/{sessionId}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/cart/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "{{sessionId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /cart/{sessionId}/items/{productId}",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/cart/{{sessionId}}/items/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "{{sessionId}}", "items", "{{productId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE /cart/{sessionId} — clear cart",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/cart/{{sessionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "{{sessionId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "POST /orders/checkout — atomic checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('orderId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_id\": \"{{sessionId}}\",\n  \"user_id\": {{userId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "checkout"]
+            },
+            "description": "Reads the cart from Valkey, opens a PostgreSQL transaction with SELECT FOR UPDATE on each product to prevent oversell, decrements stock, creates the order, clears the cart, and publishes an order.created message to RabbitMQ."
+          }
+        },
+        {
+          "name": "GET /orders/{id}",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

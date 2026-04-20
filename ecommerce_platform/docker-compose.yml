@@ -1,0 +1,156 @@
+# =============================================================
+# docker-compose.yml — Local development environment
+#
+# Starts all five backing services on your machine.
+# Run:  docker compose up -d
+# Stop: docker compose down
+# Wipe data volumes: docker compose down -v
+#
+# Each service section includes a comment showing the hosted
+# (cloud) equivalent used in production.
+# =============================================================
+
+services:
+
+  # -----------------------------------------------------------
+  # PostgreSQL — primary relational database
+  #
+  # Hosted alternatives:
+  #   AWS RDS:          POSTGRES_URL=postgresql+asyncpg://user:pass@<rds-endpoint>:5432/ecommerce
+  #   Google Cloud SQL: POSTGRES_URL=postgresql+asyncpg://user:pass@<cloudsql-ip>:5432/ecommerce
+  #   Supabase:         POSTGRES_URL=postgresql+asyncpg://postgres:<pass>@db.<project>.supabase.co:5432/postgres
+  #   Neon (serverless): POSTGRES_URL=postgresql+asyncpg://user:pass@<neon-host>/ecommerce?sslmode=require
+  # -----------------------------------------------------------
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: ecommerce
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persist data across restarts so you don't lose seed data on every `docker compose down`
+      - postgres_data:/var/lib/postgresql/data
+      # Run init.sql automatically on first start to create tables and seed data
+      - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------------------------------------
+  # Valkey — in-memory cache, session store, and rate limiter
+  #
+  # Valkey is a community-maintained, BSD-licensed fork of Redis,
+  # created after Redis changed to a non-open-source license in 2024.
+  # It is 100% protocol-compatible — all Redis clients (including
+  # redis-py) work with Valkey unchanged.
+  #
+  # Hosted alternatives:
+  #   AWS ElastiCache (Valkey): REDIS_URL=rediss://user:token@<cluster>.cache.amazonaws.com:6379
+  #   Upstash (Redis-compatible): REDIS_URL=rediss://default:<token>@<host>.upstash.io:6379
+  #   Aiven for Valkey:          REDIS_URL=rediss://default:<pass>@<host>.aivencloud.com:PORT
+  # -----------------------------------------------------------
+  valkey:
+    image: valkey/valkey:8
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------------------------------------
+  # Elasticsearch — product search engine
+  #
+  # ES_JAVA_OPTS limits heap memory so it doesn't consume all RAM locally.
+  # xpack.security.enabled=false skips TLS/auth for local development.
+  #
+  # Hosted alternatives:
+  #   Elastic Cloud:    ELASTICSEARCH_URL=https://user:pass@<deployment>.es.io:9243
+  #   AWS OpenSearch:   ELASTICSEARCH_URL=https://<domain>.us-east-1.es.amazonaws.com
+  #                     (OpenSearch is a fully open-source Elasticsearch fork)
+  #   Bonsai (managed): ELASTICSEARCH_URL=https://user:pass@<host>.bonsaisearch.net
+  # -----------------------------------------------------------
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # -----------------------------------------------------------
+  # MinIO — local S3-compatible object storage for product images
+  #
+  # MinIO implements the same API as AWS S3. Code written for MinIO
+  # works against real S3 with only a config change (remove the
+  # STORAGE_ENDPOINT_URL variable so boto3 targets AWS).
+  #
+  # Port 9000: S3-compatible API (used by the app)
+  # Port 9001: MinIO web console (open in browser for a file browser UI)
+  #
+  # Hosted alternatives:
+  #   AWS S3:          Remove STORAGE_ENDPOINT_URL; set real AWS credentials
+  #   Google Cloud Storage: use google-cloud-storage client instead of boto3
+  #   Cloudflare R2:   STORAGE_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
+  #                    (R2 is S3-compatible — no code changes needed)
+  # -----------------------------------------------------------
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------------------------------------
+  # RabbitMQ — message queue for async post-order tasks
+  #
+  # Port 5672:  AMQP protocol (used by the app and worker)
+  # Port 15672: Management web UI — open http://localhost:15672
+  #             to browse queues and messages (login: guest/guest)
+  #
+  # Hosted alternatives:
+  #   CloudAMQP (managed RabbitMQ):
+  #     RABBITMQ_URL=amqps://user:pass@<host>.cloudamqp.com/vhost
+  #   AWS SQS (different protocol — requires code changes):
+  #     Use boto3 SQS client instead of aio-pika; SQS is not AMQP-compatible
+  #   AWS MQ (managed RabbitMQ, AMQP-compatible):
+  #     RABBITMQ_URL=amqps://user:pass@<broker>.mq.amazonaws.com:5671
+  # -----------------------------------------------------------
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  postgres_data:
+  minio_data:

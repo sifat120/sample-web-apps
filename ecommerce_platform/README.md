@@ -4,11 +4,11 @@ A sample e-commerce application demonstrating how real online storefronts are bu
 
 | Service | Local (Docker) | Hosted (production) | What it does |
 |---|---|---|---|
-| Primary database | PostgreSQL | AWS RDS, Cloud SQL, Supabase | Products, orders, users — ACID transactions |
-| Cache | Valkey | AWS ElastiCache (Valkey), Upstash | Product page cache, shopping carts, rate limiting |
-| Search | Elasticsearch | Elastic Cloud, AWS OpenSearch | Full-text product search, autocomplete |
-| Object storage | MinIO | AWS S3, Cloudflare R2 | Product images |
-| Message queue | RabbitMQ | CloudAMQP, AWS MQ | Async post-order tasks |
+| Primary database | PostgreSQL | Azure Database for PostgreSQL, Cloud SQL, Supabase | Products, orders, users — ACID transactions |
+| Cache | Valkey | Azure Cache for Redis, Upstash | Product page cache, shopping carts, rate limiting |
+| Search | Elasticsearch | Elastic Cloud (Azure region), Bonsai | Full-text product search, autocomplete |
+| Object storage | Azurite (Azure Blob emulator) | Azure Blob Storage | Product images |
+| Message queue | RabbitMQ | CloudAMQP (Azure marketplace), Azure Service Bus | Async post-order tasks |
 
 Backend: **Python + FastAPI**. Frontend: **React + Vite + TypeScript + Tailwind**.
 
@@ -198,7 +198,7 @@ pytest tests/ -v
 ```bash
 pytest tests/test_e2e_purchase.py -v          # full end-to-end purchase flow
 pytest tests/ -v -k "cache or cart"           # any test whose name matches
-pytest tests/test_storage_and_images.py -v    # MinIO/S3 image roundtrip only
+pytest tests/test_storage_and_images.py -v    # Azure Blob (Azurite) image roundtrip only
 ```
 
 ### What each test file covers
@@ -213,7 +213,7 @@ pytest tests/test_storage_and_images.py -v    # MinIO/S3 image roundtrip only
 | `test_cart.py` | add/remove/clear, TTL is set on the cart hash, invalid product 404 |
 | `test_checkout.py` | happy path, insufficient stock 409, empty cart 400, cart cleared, **concurrent oversell prevention** |
 | `test_queue_publish.py` | checkout publishes the expected `order.created` message to RabbitMQ |
-| `test_e2e_purchase.py` | one test exercises the **whole stack** in 10 explicit steps (PostgreSQL + Elasticsearch + MinIO + Valkey + RabbitMQ) |
+| `test_e2e_purchase.py` | one test exercises the **whole stack** in 10 explicit steps (PostgreSQL + Elasticsearch + Azurite + Valkey + RabbitMQ) |
 
 > Tests use unique UUID-based emails and cart session ids, so they are safe to re-run repeatedly without resetting the database.
 
@@ -284,14 +284,12 @@ Switch from local Docker services to hosted cloud services by changing environme
 
 | Variable | Local default | Hosted example |
 |---|---|---|
-| `POSTGRES_URL` | Docker PostgreSQL | AWS RDS, Cloud SQL, Supabase, Neon |
-| `REDIS_URL` | Docker Valkey | AWS ElastiCache (Valkey), Upstash |
-| `ELASTICSEARCH_URL` | Docker Elasticsearch | Elastic Cloud, AWS OpenSearch |
-| `STORAGE_ENDPOINT_URL` | `http://localhost:9000` (MinIO) | Remove this var — boto3 auto-targets AWS S3 |
-| `STORAGE_ACCESS_KEY` | `minioadmin` | AWS IAM access key |
-| `STORAGE_SECRET_KEY` | `minioadmin` | AWS IAM secret key |
-| `STORAGE_BUCKET` | `product-images` | Your production bucket name |
-| `RABBITMQ_URL` | Docker RabbitMQ | CloudAMQP, AWS MQ |
+| `POSTGRES_URL` | Docker PostgreSQL | Azure Database for PostgreSQL, Cloud SQL, Supabase, Neon |
+| `REDIS_URL` | Docker Valkey | Azure Cache for Redis, Upstash |
+| `ELASTICSEARCH_URL` | Docker Elasticsearch | Elastic Cloud (Azure region), Bonsai |
+| `AZURE_STORAGE_CONNECTION_STRING` | Azurite well-known dev connection string | Production Azure Storage account connection string |
+| `AZURE_STORAGE_CONTAINER` | `product-images` | Your production blob container name |
+| `RABBITMQ_URL` | Docker RabbitMQ | CloudAMQP (Azure marketplace), Azure Service Bus (with SDK rewrite) |
 | `APP_ENV` | `local` | `production` |
 | `SECRET_KEY` | `change-me-in-production` | A strong random 64-char hex string |
 

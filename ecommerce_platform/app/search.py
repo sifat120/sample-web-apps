@@ -25,12 +25,35 @@ _es: AsyncElasticsearch | None = None
 PRODUCTS_INDEX = "products"
 
 
+def _build_es_client_kwargs() -> dict:
+    """
+    Translate auth settings into the kwargs expected by AsyncElasticsearch.
+
+    Precedence (highest first):
+      1. es_api_key            — Elastic Cloud "API keys" UI / data API keys
+      2. es_username + es_password — basic auth (Elastic Cloud, Bonsai, self-hosted)
+      3. no auth               — local Docker
+
+    Plain URL + basic auth (or API key) covers Elastic Cloud on Azure,
+    Bonsai, and any self-hosted Elasticsearch / OpenSearch deployment that
+    uses the basic-auth fine-grained access control option.
+    """
+    kwargs: dict = {}
+
+    if settings.es_api_key:
+        kwargs["api_key"] = settings.es_api_key
+    elif settings.es_username and settings.es_password:
+        kwargs["basic_auth"] = (settings.es_username, settings.es_password)
+
+    return kwargs
+
+
 async def get_es() -> AsyncElasticsearch:
     """Return the shared Elasticsearch connection, creating it if needed."""
     global _es
 
     if _es is None:
-        _es = AsyncElasticsearch(settings.elasticsearch_url)
+        _es = AsyncElasticsearch(settings.elasticsearch_url, **_build_es_client_kwargs())
 
     return _es
 

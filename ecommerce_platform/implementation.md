@@ -17,7 +17,7 @@ From an application code perspective, nothing changes:
 - Valkey uses the identical wire protocol as Redis
 - All Redis commands work unchanged
 - The `redis-py` Python client connects to Valkey without modification
-- Hosted Valkey services (AWS ElastiCache for Valkey, Upstash) are drop-in replacements
+- Hosted Valkey services (Azure Cache for Redis, Upstash) are drop-in replacements
 
 The only practical differences are the Docker image name (`valkey/valkey` instead of `redis`) and
 the CLI binary (`valkey-cli` instead of `redis-cli`).
@@ -30,11 +30,11 @@ variables. Switching environments is purely a configuration change.
 
 | Service | Local (Docker) | Hosted option | Config variable |
 |---|---|---|---|
-| PostgreSQL | `postgres:16` | AWS RDS, Supabase, Neon | `POSTGRES_URL` |
-| Valkey | `valkey/valkey:8` | AWS ElastiCache, Upstash | `REDIS_URL` |
-| Elasticsearch | `elasticsearch:8.13.0` | Elastic Cloud, AWS OpenSearch | `ELASTICSEARCH_URL` |
-| Object storage | `minio/minio` | AWS S3, Cloudflare R2 | `STORAGE_ENDPOINT_URL` + credentials |
-| Message queue | `rabbitmq:3-management` | CloudAMQP, AWS MQ | `RABBITMQ_URL` |
+| PostgreSQL | `postgres:16` | Azure Database for PostgreSQL, Supabase, Neon | `POSTGRES_URL` |
+| Valkey | `valkey/valkey:8` | Azure Cache for Redis, Upstash | `REDIS_URL` |
+| Elasticsearch | `elasticsearch:8.13.0` | Elastic Cloud (Azure region), Bonsai | `ELASTICSEARCH_URL` |
+| Object storage | `mcr.microsoft.com/azure-storage/azurite` | Azure Blob Storage | `AZURE_STORAGE_CONNECTION_STRING` + container |
+| Message queue | `rabbitmq:3-management` | CloudAMQP (Azure marketplace), Azure Service Bus | `RABBITMQ_URL` |
 
 See `.env.example` for full connection string examples for each hosted option.
 
@@ -286,14 +286,14 @@ Then place an order in the first terminal and watch the worker logs:
 
 ---
 
-## Phase 6 — Object Storage (MinIO / S3)
+## Phase 6 — Object Storage (Azurite / Azure Blob Storage)
 
 **Goal:** Store and serve product images without using the database.
 
 ### What we built
-- `app/storage.py` — boto3 S3 client; points to MinIO locally, real S3 in production
+- `app/storage.py` — `azure-storage-blob` client; points to Azurite locally, real Azure Blob Storage in production
 - `POST /products/{id}/image` — upload endpoint
-- `GET /products/{id}/image-url` — pre-signed URL generation
+- `GET /products/{id}/image-url` — SAS URL generation
 
 ### Why not store images in PostgreSQL?
 
@@ -303,26 +303,27 @@ Storing binary files in a database column (`BYTEA` in PostgreSQL) causes several
 - No built-in CDN support
 - Database CPU and I/O are consumed by file serving instead of query processing
 
-Object storage (MinIO/S3) is designed for exactly this — cheap, durable, scalable, and serves files via HTTP directly without involving the app server.
+Object storage (Azure Blob) is designed for exactly this — cheap, durable, scalable, and serves files via HTTP directly without involving the app server.
 
-### Pre-signed URLs
+### SAS (Shared Access Signature) URLs
 
-Rather than proxying file downloads through the API, we generate a **pre-signed URL** — a URL that includes a cryptographic signature granting temporary read access:
+Rather than proxying file downloads through the API, we generate a **SAS URL** — a URL that includes a cryptographic signature granting temporary read access:
 
 ```
-https://localhost:9000/product-images/products/7/photo.jpg?X-Amz-Signature=abc&X-Amz-Expires=3600
+http://localhost:10000/devstoreaccount1/product-images/products/7/photo.jpg?sig=abc&se=2024-01-01T01:00:00Z&sp=r
 ```
 
-The URL expires after 1 hour. If leaked, it can't be used indefinitely. The API server never touches the file bytes during download — the client fetches directly from MinIO/S3.
+The URL expires after 1 hour. If leaked, it can't be used indefinitely. The API server never touches the file bytes during download — the client fetches directly from Azure Blob.
 
 ### Local vs. production: one config change
 
-```python
-# Local (MinIO)
-STORAGE_ENDPOINT_URL=http://localhost:9000
+```bash
+# Local (Azurite) — uses the well-known Azurite dev connection string
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=...;BlobEndpoint=http://localhost:10000/devstoreaccount1;
 
-# Production (AWS S3) — just remove STORAGE_ENDPOINT_URL
-# boto3 automatically uses S3 when no endpoint is specified
+# Production (Azure Blob Storage) — paste the connection string from the
+# Azure portal: Storage account → Access keys → Connection string
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net
 ```
 
 ### How to test Phase 6
@@ -428,7 +429,7 @@ The result is short, readable components and zero hidden caching — the cache-a
 - **The Redis cache is invisible to the frontend.** The first product fetch hits PostgreSQL, the second hits Valkey, but `getProduct(id)` looks identical in both cases. This is the whole point of a server-side cache.
 - **The home page is URL-driven.** Search query, category, and price filters live in the query string (`/?q=boots&category=footwear&max_price=200`) so users can bookmark, share, or refresh searches without losing state.
 - **Autocomplete is debounced by 200 ms** in `Navbar.tsx` — typing fast still produces only one Elasticsearch suggester request per pause, not one per keystroke.
-- **Product images are served via pre-signed URLs.** The frontend asks the backend for `/api/products/:id/image-url`, then puts the returned URL straight into an `<img src=...>` — the bytes flow directly from MinIO/S3 to the browser, never through the API server.
+- **Product images are served via SAS URLs.** The frontend asks the backend for `/api/products/:id/image-url`, then puts the returned URL straight into an `<img src=...>` — the bytes flow directly from Azure Blob to the browser, never through the API server.
 - **Checkout reflects ACID guarantees in the UI.** A 409 "Insufficient stock" from the backend (when `SELECT FOR UPDATE` blocks a conflicting checkout) becomes a red toast; the cart is not cleared and the user can retry.
 
 ### How to test Phase 7
@@ -461,4 +462,4 @@ npm run build       # runs `tsc && vite build`
 npm run preview     # serves dist/ on http://localhost:4173
 ```
 
-The static `dist/` bundle can be deployed to any static host (S3 + CloudFront, Netlify, Vercel, Cloudflare Pages). Configure the host to forward `/api/*` to the FastAPI backend (or change `BASE` in `src/api/client.ts` to a full URL).
+The static `dist/` bundle can be deployed to any static host (Azure Static Web Apps, Azure Storage static website + Front Door, Netlify, Vercel, Cloudflare Pages). Configure the host to forward `/api/*` to the FastAPI backend (or change `BASE` in `src/api/client.ts` to a full URL).

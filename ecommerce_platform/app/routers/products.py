@@ -14,7 +14,7 @@ Key patterns demonstrated:
   - Cache-aside: check Redis before querying PostgreSQL
   - Cache invalidation: delete the cache entry when data changes
   - Elasticsearch: full-text search, filters, and autocomplete
-  - Object storage: upload files to MinIO/S3, serve via pre-signed URLs
+  - Object storage: upload files to Azurite/Azure Blob, serve via SAS URLs
 """
 
 from typing import List, Optional
@@ -306,7 +306,7 @@ async def upload_product_image(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Upload a product image to object storage (MinIO locally, S3 in production).
+    Upload a product image to object storage (Azurite locally, Azure Blob in production).
 
     Why not store the image in PostgreSQL?
       Binary files in the database bloat backups, slow down queries, and
@@ -315,7 +315,7 @@ async def upload_product_image(
 
     What is stored in PostgreSQL?
       Only the storage key (a short path string like "products/7/photo.jpg").
-      The actual bytes live in MinIO/S3. The key is later used to generate
+      The actual bytes live in Azure Blob. The key is later used to generate
       a pre-signed download URL.
     """
     product = await db.get(Product, product_id)
@@ -329,7 +329,7 @@ async def upload_product_image(
     # Build a storage path: products/{id}/{filename}
     storage_key = f"products/{product_id}/{file.filename}"
 
-    # Upload to MinIO/S3
+    # Upload to Azure Blob Storage
     upload_file(storage_key, file_bytes, file.content_type or "application/octet-stream")
 
     # Save the storage key to PostgreSQL so we can retrieve the image later
@@ -349,7 +349,7 @@ async def get_image_url(
 
     A pre-signed URL is a time-limited link that grants read access to a
     specific file without exposing storage credentials. The client uses
-    this URL to download the image directly from MinIO/S3 — the API
+    this URL to download the image directly from Azure Blob — the API
     server is not involved in the file transfer.
 
     The URL expires after 1 hour. Requesting a fresh URL is cheap.

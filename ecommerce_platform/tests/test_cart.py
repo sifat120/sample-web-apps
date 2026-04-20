@@ -1,11 +1,18 @@
+import uuid
+
 import pytest
 from httpx import AsyncClient
+
+
+def _sid(prefix: str) -> str:
+    """Generate a unique cart session id; safe under pytest-xdist parallelism."""
+    return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
 @pytest.mark.asyncio
 async def test_add_and_get_cart(client: AsyncClient):
     # Use a product we know exists from seed data (id=1, Hiking Boots, stock=50)
-    session_id = "test-session-cart-1"
+    session_id = _sid("test-cart-add")
 
     resp = await client.post(f"/cart/{session_id}/items", json={"product_id": 1, "quantity": 2})
     assert resp.status_code == 200
@@ -23,7 +30,7 @@ async def test_add_and_get_cart(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_remove_item_from_cart(client: AsyncClient):
-    session_id = "test-session-cart-2"
+    session_id = _sid("test-cart-remove")
 
     await client.post(f"/cart/{session_id}/items", json={"product_id": 1, "quantity": 1})
     await client.post(f"/cart/{session_id}/items", json={"product_id": 2, "quantity": 1})
@@ -40,7 +47,7 @@ async def test_remove_item_from_cart(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_empty_cart(client: AsyncClient):
-    resp = await client.get("/cart/nonexistent-session-xyz")
+    resp = await client.get(f"/cart/{_sid('nonexistent')}")
     assert resp.status_code == 200
     assert resp.json()["items"] == []
     assert resp.json()["total"] == 0.0
@@ -48,14 +55,14 @@ async def test_empty_cart(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_add_invalid_product(client: AsyncClient):
-    resp = await client.post("/cart/test-session-bad/items", json={"product_id": 999999, "quantity": 1})
+    resp = await client.post(f"/cart/{_sid('test-bad')}/items", json={"product_id": 999999, "quantity": 1})
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_add_to_cart_accumulates_quantity(client: AsyncClient):
     """Adding the same product twice should sum the quantities, not overwrite."""
-    session_id = "test-session-accumulate"
+    session_id = _sid("test-cart-accumulate")
 
     first = await client.post(f"/cart/{session_id}/items", json={"product_id": 1, "quantity": 2})
     assert first.status_code == 200
@@ -94,24 +101,24 @@ async def test_add_to_cart_exceeding_stock_returns_400(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_remove_nonexistent_cart_item_returns_404(client: AsyncClient):
     """Deleting a product that's not in the cart should return 404."""
-    resp = await client.delete("/cart/empty-remove-session/items/1")
+    resp = await client.delete(f"/cart/{_sid('empty-remove')}/items/1")
     assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
 async def test_cart_quantity_must_be_positive(client: AsyncClient):
     """Pydantic validation should reject quantity 0 / negative with 422."""
-    zero = await client.post("/cart/validate-session/items", json={"product_id": 1, "quantity": 0})
+    zero = await client.post(f"/cart/{_sid('validate')}/items", json={"product_id": 1, "quantity": 0})
     assert zero.status_code == 422
 
-    negative = await client.post("/cart/validate-session/items", json={"product_id": 1, "quantity": -1})
+    negative = await client.post(f"/cart/{_sid('validate')}/items", json={"product_id": 1, "quantity": -1})
     assert negative.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_cart_ttl_set(client: AsyncClient, redis_client):
     """Verify that the cart key has a TTL after adding an item."""
-    session_id = "test-session-ttl"
+    session_id = _sid("test-cart-ttl")
     await client.post(f"/cart/{session_id}/items", json={"product_id": 1, "quantity": 1})
 
     ttl = await redis_client.ttl(f"cart:{session_id}")

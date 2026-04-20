@@ -64,7 +64,7 @@ Elasticsearch handles geo-distance queries natively: "find all restaurants withi
 
 ---
 
-### Message Queue — RabbitMQ (local) / SQS (managed cloud)
+### Message Queue — RabbitMQ (local) / CloudAMQP or Azure Service Bus (managed cloud)
 **What it is:** A buffer for slow, non-urgent background work. See [The Message Queue](concepts.md#6-the-message-queue).
 
 **Why it's used here:** After a reservation is confirmed, a reminder needs to be sent 24 hours before and again 2 hours before the reservation. This is a scheduled future task — the server shouldn't block the booking confirmation to set it up. Instead, it publishes a "reservation confirmed" message to the queue, and a reminder worker picks it up and schedules the SMS/email notifications. See [Async Processing](concepts.md#15-async-processing-and-background-jobs).

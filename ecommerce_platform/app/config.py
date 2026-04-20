@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     # PostgreSQL (primary database)
     # Format: postgresql+asyncpg://user:password@host:port/database
     # asyncpg is the async PostgreSQL driver used by SQLAlchemy.
+    #
+    # Hosted examples (set in .env or as environment variables):
+    #   Azure Database for PostgreSQL — Flexible Server:
+    #     postgresql+asyncpg://<user>:<password>@<server>.postgres.database.azure.com:5432/ecommerce?ssl=require
+    #   Google Cloud SQL: postgresql+asyncpg://user:pass@<cloud-sql-ip>:5432/ecommerce
+    #   Supabase / Neon also work — they speak standard Postgres.
     # ------------------------------------------------------------------
     postgres_url: str = "postgresql+asyncpg://postgres:secret@localhost:5432/ecommerce"
 
@@ -41,36 +47,71 @@ class Settings(BaseSettings):
     #
     # Local default connects to the Valkey Docker container.
     # Hosted examples (set in .env or as environment variables):
-    #   AWS ElastiCache: rediss://default:<token>@<cluster>.cache.amazonaws.com:6379
-    #   Upstash:         rediss://default:<pass>@<host>.upstash.io:6379
+    #   Azure Cache for Redis: rediss://<user>:<access-key>@<name>.redis.cache.windows.net:6380
+    #   Upstash:               rediss://default:<pass>@<host>.upstash.io:6379
     # ------------------------------------------------------------------
     redis_url: str = "redis://localhost:6379"
 
     # ------------------------------------------------------------------
     # Elasticsearch (product search engine)
+    #
+    # Local Docker has no auth. Hosted providers usually require one of:
+    #   - Basic auth (Elastic Cloud on Azure, Bonsai)   → set es_username + es_password
+    #   - API key   (Elastic Cloud on Azure, recommended) → set es_api_key
+    #
+    # Azure does not offer a first-party managed Elasticsearch service;
+    # the official path is Elastic Cloud on the Azure Marketplace, which
+    # runs on Azure infrastructure but is operated by Elastic.
+    #
+    # Leave all auth fields unset for the local Docker setup.
+    # If both an api_key and username/password are set, the api_key wins.
     # ------------------------------------------------------------------
     elasticsearch_url: str = "http://localhost:9200"
+    es_username: str | None = None
+    es_password: str | None = None
+    es_api_key: str | None = None
 
     # ------------------------------------------------------------------
-    # Object storage (product images)
+    # Object storage (product images) — Azure Blob Storage
     #
-    # Local:      storage_endpoint_url = "http://localhost:9000"  (MinIO)
-    # Production: leave storage_endpoint_url unset — boto3 will
-    #             automatically connect to AWS S3.
+    # Local:      Azurite (Microsoft's official Azure Blob emulator,
+    #             running in Docker via mcr.microsoft.com/azure-storage/azurite)
+    # Production: Azure Blob Storage in your Azure subscription
     #
-    # "str | None" means this value can be either a string or absent
-    # (None). When it is None, boto3 uses its built-in AWS S3 endpoint.
+    # The connection string is the single setting that switches between
+    # local and production — same SDK code path either way.
+    #
+    # Local (Azurite well-known dev connection string):
+    #   DefaultEndpointsProtocol=http;
+    #   AccountName=devstoreaccount1;
+    #   AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;
+    #   BlobEndpoint=http://localhost:10000/devstoreaccount1;
+    #
+    # Production (real Azure storage account):
+    #   DefaultEndpointsProtocol=https;
+    #   AccountName=<your-storage-account>;
+    #   AccountKey=<your-storage-account-key>;
+    #   EndpointSuffix=core.windows.net
     # ------------------------------------------------------------------
-    storage_endpoint_url: str | None = None
-    storage_access_key: str = "minioadmin"
-    storage_secret_key: str = "minioadmin"
-    storage_bucket: str = "product-images"
-    storage_region: str = "us-east-1"
+    azure_storage_connection_string: str = (
+        "DefaultEndpointsProtocol=http;"
+        "AccountName=devstoreaccount1;"
+        "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
+        "BlobEndpoint=http://localhost:10000/devstoreaccount1;"
+    )
+    azure_storage_container: str = "product-images"
 
     # ------------------------------------------------------------------
     # RabbitMQ (async message queue for post-order tasks)
     # Local:      RabbitMQ running in Docker
-    # Production: replace with a managed service URL (e.g. CloudAMQP)
+    # Hosted examples:
+    #   CloudAMQP (also available as an Azure Marketplace plan):
+    #     amqps://<user>:<pass>@<host>.cloudamqp.com/<vhost>
+    #   Self-host on Azure Kubernetes Service (AKS) with the bitnami chart.
+    #
+    # Note: Azure Service Bus is not AMQP 0-9-1 compatible with aio_pika
+    # in the way RabbitMQ is — switching to it would require rewriting
+    # queue.py and order_worker.py with the azure-servicebus SDK.
     # ------------------------------------------------------------------
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
 

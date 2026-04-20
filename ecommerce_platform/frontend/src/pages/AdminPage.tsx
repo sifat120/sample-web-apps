@@ -183,7 +183,7 @@ function CreateProductForm({ onCreated }: { onCreated: (p: Product) => void }) {
             Upload an image for product #{lastCreatedId}
           </p>
           <p className="mt-0.5 text-xs text-slate-500">
-            Stored in MinIO (or S3 in production); a pre-signed URL is generated on demand.
+            Stored in Azurite (or Azure Blob Storage in production); a SAS URL is generated on demand.
           </p>
           <input
             type="file"

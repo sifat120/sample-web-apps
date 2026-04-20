@@ -24,7 +24,7 @@ from app.database import AsyncSessionLocal, engine
 from app.queue import close_queue, get_channel
 from app.routers import cart, orders, products, users
 from app.search import close_es, ensure_products_index, get_es
-from app.storage import ensure_bucket
+from app.storage import ensure_container
 
 
 @asynccontextmanager
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     await get_redis()                # open Redis connection
     await get_es()                   # open Elasticsearch connection
     await ensure_products_index()    # create ES index if it doesn't exist
-    ensure_bucket()                  # create MinIO bucket if it doesn't exist
+    ensure_container()               # create the Azure Blob container if it doesn't exist
 
     # RabbitMQ connection is optional at startup — the worker runs as a
     # separate process and the queue connection will be established on
@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
 # All configuration, middleware, and routes attach to this object.
 app = FastAPI(
     title="E-Commerce Platform",
-    description="Sample e-commerce API demonstrating PostgreSQL, Redis, Elasticsearch, MinIO, and RabbitMQ.",
+    description="Sample e-commerce API demonstrating PostgreSQL, Redis, Elasticsearch, Azure Blob Storage, and RabbitMQ.",
     version="1.0.0",
     lifespan=lifespan,
 )

@@ -5,7 +5,7 @@ A collection of self-contained web application designs and reference implementat
 The repository is organized in two halves:
 
 - **[`ideas/`](ideas/)** — written specs for eight sample applications, plus a plain-language [concepts](ideas/concepts.md) primer and an [overview](ideas/overview.md) index.
-- **[`ecommerce_platform/`](ecommerce_platform/)** — a working full-stack implementation of the first idea (FastAPI + React + Postgres + Valkey + Elasticsearch + MinIO + RabbitMQ).
+- **[`ecommerce_platform/`](ecommerce_platform/)** — a working full-stack implementation of the first idea (FastAPI + React + Postgres + Valkey + Elasticsearch + Azurite + RabbitMQ).
 
 ---
 
@@ -26,7 +26,7 @@ samples/
 └── ecommerce_platform/       # Reference implementation of the first idea
     ├── README.md             # How to run, test, and use Postman
     ├── implementation.md     # Phase-by-phase build log
-    ├── docker-compose.yml    # Postgres, Valkey, Elasticsearch, MinIO, RabbitMQ
+    ├── docker-compose.yml    # Postgres, Valkey, Elasticsearch, Azurite, RabbitMQ
     ├── app/                  # FastAPI backend
     ├── workers/              # Async order-processing consumer
     ├── frontend/             # React + Vite + TypeScript + Tailwind
@@ -43,13 +43,13 @@ Each idea in [`ideas/`](ideas/) follows the same shape: an overview, a tech-stac
 
 | # | Idea | Highlight Stack | Key Challenge |
 |---|---|---|---|
-| 1 | [E-Commerce Platform](ideas/ecommerce_platform.md) | Postgres · Redis · Elasticsearch · S3 · RabbitMQ | Preventing oversell during flash sales |
-| 2 | [Real-Time Chat](ideas/realtime_chat.md) | MongoDB · Redis Pub/Sub · WebSockets · S3 | Horizontally scaling WebSocket servers |
+| 1 | [E-Commerce Platform](ideas/ecommerce_platform.md) | Postgres · Redis · Elasticsearch · Azure Blob · RabbitMQ | Preventing oversell during flash sales |
+| 2 | [Real-Time Chat](ideas/realtime_chat.md) | MongoDB · Redis Pub/Sub · WebSockets · Azure Blob | Horizontally scaling WebSocket servers |
 | 3 | [URL Shortener](ideas/url_shortener.md) | Postgres · Redis · ClickHouse · Kafka | Sub-millisecond redirect latency |
 | 4 | [Analytics Dashboard](ideas/analytics_dashboard.md) | Kafka · ClickHouse · Redis · Postgres | Exactly-once Kafka → ClickHouse delivery |
 | 5 | [Restaurant Reservation](ideas/restaurant_reservation.md) | Postgres · Redis · Elasticsearch/PostGIS · RabbitMQ | Preventing double-booking |
-| 6 | [Social Media Feed](ideas/social_feed.md) | Postgres · Redis · S3 · Elasticsearch · Kafka | Fan-out for celebrity accounts |
-| 7 | [Job Board / ATS](ideas/job_board.md) | Postgres · Redis · Elasticsearch · S3 · Sidekiq/BullMQ | Multi-factor search ranking |
+| 6 | [Social Media Feed](ideas/social_feed.md) | Postgres · Redis · Azure Blob · Elasticsearch · Kafka | Fan-out for celebrity accounts |
+| 7 | [Job Board / ATS](ideas/job_board.md) | Postgres · Redis · Elasticsearch · Azure Blob · Sidekiq/BullMQ | Multi-factor search ranking |
 
 See [`ideas/overview.md`](ideas/overview.md) for full tech reference tables and a docker-compose skeleton that covers most of the stacks above.
 
@@ -62,7 +62,7 @@ The first idea is fully implemented as a runnable example.
 **Stack**
 - **Backend** — FastAPI (async), SQLAlchemy + asyncpg, Alembic
 - **Frontend** — React 18, Vite, TypeScript, Tailwind, react-router
-- **Storage** — PostgreSQL (orders/inventory), Valkey/Redis (cart + cache + rate limiting), Elasticsearch (search + autocomplete), MinIO (product images), RabbitMQ (post-order tasks)
+- **Storage** — PostgreSQL (orders/inventory), Valkey/Redis (cart + cache + rate limiting), Elasticsearch (search + autocomplete), Azurite/Azure Blob (product images), RabbitMQ (post-order tasks)
 - **Tests** — 29 pytest cases including a full end-to-end purchase flow
 
 **Quick start**
@@ -85,7 +85,7 @@ For the complete walkthrough — running, testing, the Postman collection, and t
 
 Every idea in this repo is designed to run for free on a single laptop using Docker. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (free for personal use) and you have everything you need — no cloud accounts required.
 
-The [overview doc](ideas/overview.md#running-locally-free-no-hosting-required) maps each technology to its local Docker image and explains the cloud-to-local substitutions (S3 → MinIO, SQS → RabbitMQ, etc.).
+The [overview doc](ideas/overview.md#running-locally-free-no-hosting-required) maps each technology to its local Docker image and explains the cloud-to-local substitutions (Azure Blob → Azurite, Service Bus → RabbitMQ, etc.).
 
 ---
 

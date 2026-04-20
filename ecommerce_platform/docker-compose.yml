@@ -7,7 +7,8 @@
 # Wipe data volumes: docker compose down -v
 #
 # Each service section includes a comment showing the hosted
-# (cloud) equivalent used in production.
+# (cloud) equivalent used in production. The recommended cloud
+# is Microsoft Azure; alternative providers are also listed.
 # =============================================================
 
 services:
@@ -16,7 +17,8 @@ services:
   # PostgreSQL — primary relational database
   #
   # Hosted alternatives:
-  #   AWS RDS:          POSTGRES_URL=postgresql+asyncpg://user:pass@<rds-endpoint>:5432/ecommerce
+  #   Azure Database for PostgreSQL — Flexible Server:
+  #     POSTGRES_URL=postgresql+asyncpg://<user>:<pass>@<server>.postgres.database.azure.com:5432/ecommerce?ssl=require
   #   Google Cloud SQL: POSTGRES_URL=postgresql+asyncpg://user:pass@<cloudsql-ip>:5432/ecommerce
   #   Supabase:         POSTGRES_URL=postgresql+asyncpg://postgres:<pass>@db.<project>.supabase.co:5432/postgres
   #   Neon (serverless): POSTGRES_URL=postgresql+asyncpg://user:pass@<neon-host>/ecommerce?sslmode=require
@@ -49,9 +51,10 @@ services:
   # redis-py) work with Valkey unchanged.
   #
   # Hosted alternatives:
-  #   AWS ElastiCache (Valkey): REDIS_URL=rediss://user:token@<cluster>.cache.amazonaws.com:6379
+  #   Azure Cache for Redis (TLS on port 6380):
+  #     REDIS_URL=rediss://<user>:<access-key>@<name>.redis.cache.windows.net:6380
   #   Upstash (Redis-compatible): REDIS_URL=rediss://default:<token>@<host>.upstash.io:6379
-  #   Aiven for Valkey:          REDIS_URL=rediss://default:<pass>@<host>.aivencloud.com:PORT
+  #   Aiven for Valkey:           REDIS_URL=rediss://default:<pass>@<host>.aivencloud.com:PORT
   # -----------------------------------------------------------
   valkey:
     image: valkey/valkey:8
@@ -70,10 +73,15 @@ services:
   # xpack.security.enabled=false skips TLS/auth for local development.
   #
   # Hosted alternatives:
-  #   Elastic Cloud:    ELASTICSEARCH_URL=https://user:pass@<deployment>.es.io:9243
-  #   AWS OpenSearch:   ELASTICSEARCH_URL=https://<domain>.us-east-1.es.amazonaws.com
-  #                     (OpenSearch is a fully open-source Elasticsearch fork)
-  #   Bonsai (managed): ELASTICSEARCH_URL=https://user:pass@<host>.bonsaisearch.net
+  #   Elastic Cloud on Azure (via the Azure Marketplace):
+  #     ELASTICSEARCH_URL=https://<deployment>.es.<region>.azure.elastic-cloud.com:9243
+  #     ES_USERNAME=elastic / ES_PASSWORD=...   (or ES_API_KEY=...)
+  #   Bonsai (managed): ELASTICSEARCH_URL=https://<host>.bonsaisearch.net
+  #                     ES_USERNAME=... / ES_PASSWORD=...
+  #
+  # Note: Azure does not offer a first-party managed Elasticsearch.
+  # Elastic Cloud on Azure runs on Azure infrastructure and is the
+  # closest "Microsoft-cloud-hosted" option.
   # -----------------------------------------------------------
   elasticsearch:
     image: elasticsearch:8.13.0
@@ -90,34 +98,32 @@ services:
       retries: 10
 
   # -----------------------------------------------------------
-  # MinIO — local S3-compatible object storage for product images
+  # Azurite — local Azure Blob Storage emulator for product images
   #
-  # MinIO implements the same API as AWS S3. Code written for MinIO
-  # works against real S3 with only a config change (remove the
-  # STORAGE_ENDPOINT_URL variable so boto3 targets AWS).
+  # Azurite is Microsoft's official emulator for the Azure Blob,
+  # Queue, and Table services. The same azure-storage-blob SDK
+  # works against Azurite locally and against real Azure Blob
+  # Storage in production with only a connection-string change.
   #
-  # Port 9000: S3-compatible API (used by the app)
-  # Port 9001: MinIO web console (open in browser for a file browser UI)
+  # Port 10000: Blob service (used by the app)
+  # Port 10001: Queue service (unused here, exposed for completeness)
+  # Port 10002: Table service (unused here, exposed for completeness)
   #
   # Hosted alternatives:
-  #   AWS S3:          Remove STORAGE_ENDPOINT_URL; set real AWS credentials
-  #   Google Cloud Storage: use google-cloud-storage client instead of boto3
-  #   Cloudflare R2:   STORAGE_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
-  #                    (R2 is S3-compatible — no code changes needed)
+  #   Azure Blob Storage (production):
+  #     AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net
   # -----------------------------------------------------------
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
     volumes:
-      - minio_data:/data
+      - azurite_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD-SHELL", "nc -z localhost 10000 || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -130,12 +136,13 @@ services:
   #             to browse queues and messages (login: guest/guest)
   #
   # Hosted alternatives:
-  #   CloudAMQP (managed RabbitMQ):
+  #   CloudAMQP (managed RabbitMQ; available as an Azure Marketplace plan):
   #     RABBITMQ_URL=amqps://user:pass@<host>.cloudamqp.com/vhost
-  #   AWS SQS (different protocol — requires code changes):
-  #     Use boto3 SQS client instead of aio-pika; SQS is not AMQP-compatible
-  #   AWS MQ (managed RabbitMQ, AMQP-compatible):
-  #     RABBITMQ_URL=amqps://user:pass@<broker>.mq.amazonaws.com:5671
+  #   Self-host on Azure Kubernetes Service (AKS) using the Bitnami chart.
+  #
+  # Note: Azure Service Bus is not AMQP 0-9-1 compatible with aio_pika
+  # in the way RabbitMQ is — switching to it would require rewriting
+  # queue.py and order_worker.py with the azure-servicebus SDK.
   # -----------------------------------------------------------
   rabbitmq:
     image: rabbitmq:3-management
@@ -153,4 +160,4 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  azurite_data:

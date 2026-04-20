@@ -62,7 +62,7 @@ This app is a great case study in **caching**, because redirects are read millio
 
 ---
 
-### Message Queue — Kafka (local) / SQS (managed cloud) (optional)
+### Message Queue — Kafka (local) / Azure Event Hubs (managed cloud) (optional)
 **What it is:** A buffer for async background tasks. See [The Message Queue](concepts.md#6-the-message-queue).
 
 **Why it's used here:** Recording a click in the analytics database is not critical to the redirect itself — the user doesn't need to wait for it. The redirect handler publishes a lightweight click event to the queue and immediately issues the redirect response. A background consumer reads events from the queue and batch-inserts them into ClickHouse. This keeps redirect latency as low as possible. See [Async Processing](concepts.md#15-async-processing-and-background-jobs).

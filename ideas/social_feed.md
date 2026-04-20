@@ -51,12 +51,12 @@ The hardest problem here is the **feed**: when you open the app, you need to see
 
 ---
 
-### Object Storage — S3 + CDN (production) / MinIO (local)
-**What it is:** S3 stores large files (images, videos). A CDN distributes copies of those files to servers around the world for fast access. See [Object Storage](concepts.md#7-object-storage) and [CDN](concepts.md#9-the-cdn-content-delivery-network).
+### Object Storage — Azure Blob Storage + Azure Front Door (production) / Azurite (local)
+**What it is:** Azure Blob Storage stores large files (images, videos). A CDN like Azure Front Door distributes copies of those files to servers around the world for fast access. See [Object Storage](concepts.md#7-object-storage) and [CDN](concepts.md#9-the-cdn-content-delivery-network).
 
-**Why both?** A post's image is uploaded once to S3 (the permanent store) but viewed potentially millions of times by users all over the world. The CDN caches the image at edge servers near each user — a viewer in Tokyo gets the image from a server in Tokyo, not a data center in Virginia. This cuts load times from hundreds of milliseconds to tens of milliseconds.
+**Why both?** A post's image is uploaded once to Azure Blob (the permanent store) but viewed potentially millions of times by users all over the world. The CDN caches the image at edge servers near each user — a viewer in Tokyo gets the image from a server in Tokyo, not a data center in Virginia. This cuts load times from hundreds of milliseconds to tens of milliseconds.
 
-**Running locally:** Use [MinIO](https://min.io/) instead of S3 — it's free, open-source, runs in Docker, and has an identical API. Skip the CDN entirely for local development; your browser fetches images directly from MinIO at `localhost:9000`. The CDN is a production-only performance concern.
+**Running locally:** Use [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) instead of Azure Blob Storage — Microsoft's official emulator that runs in Docker and exposes the same Blob REST API. Skip the CDN entirely for local development; your browser fetches images directly from Azurite at `localhost:10000`. The CDN is a production-only performance concern.
 
 ---
 

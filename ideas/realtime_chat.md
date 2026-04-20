@@ -55,12 +55,12 @@ The central challenge here is **real time**: standard web apps respond when the 
 
 ---
 
-### Object Storage — S3 (production) / MinIO (local)
+### Object Storage — Azure Blob Storage (production) / Azurite (local)
 **What it is:** A service for storing and retrieving large files by URL. See [Object Storage](concepts.md#7-object-storage).
 
-**Why it's used here:** Users share images, files, and voice messages. These are far too large to store in MongoDB. Instead, the file is uploaded directly to S3 from the browser using a **pre-signed URL** — a temporary URL that grants one-time upload permission, so the file never passes through your server.
+**Why it's used here:** Users share images, files, and voice messages. These are far too large to store in MongoDB. Instead, the file is uploaded directly to Azure Blob from the browser using a **SAS (Shared Access Signature) URL** — a temporary URL that grants one-time upload permission, so the file never passes through your server.
 
-**Running locally:** Use [MinIO](https://min.io/) — it runs in Docker for free and supports the same pre-signed URL workflow as S3.
+**Running locally:** Use [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) — Microsoft's official Azure Blob emulator that runs in Docker and supports the same SAS URL workflow as production Azure Blob Storage.
 
 ---
 

@@ -153,15 +153,16 @@ async def test_search_category_filter(client: AsyncClient):
     assert create.status_code == 201
 
     # Elasticsearch indexing is near-real-time; refresh by polling briefly.
+    # Generous range to tolerate parallel test load (pytest-xdist workers).
     import asyncio
     results = []
-    for _ in range(10):
+    for _ in range(40):
         resp = await client.get(f"/products/search?category={unique_category}")
         assert resp.status_code == 200
         results = resp.json()
         if results:
             break
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.25)
 
     assert results, f"Expected at least one product in category {unique_category}"
     for item in results:

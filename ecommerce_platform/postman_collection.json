@@ -181,7 +181,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["products", "{{productId}}", "image-url"]
             },
-            "description": "Returns a temporary signed URL pointing at MinIO/S3. Open it in a browser to download the file directly — the API server never touches the bytes."
+            "description": "Returns a temporary SAS URL pointing at Azure Blob Storage (Azurite locally). Open it in a browser to download the file directly — the API server never touches the bytes."
           }
         }
       ]

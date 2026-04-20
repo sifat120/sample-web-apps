@@ -65,14 +65,14 @@ These combine full-text matching (job descriptions, skill tags), geographic dist
 
 ---
 
-### Object Storage — S3 (production) / MinIO (local)
+### Object Storage — Azure Blob Storage (production) / Azurite (local)
 **What it is:** A service for storing and retrieving large files by URL. See [Object Storage](concepts.md#7-object-storage).
 
-**Why it's used here:** Resumes are PDF or DOCX files — too large and too binary to store in PostgreSQL. Candidates upload their resume to S3, and the database stores just the S3 file path. Recruiters download it via a temporary pre-signed URL (a URL that grants one-time access and expires after a short time, protecting the file from unauthorized access).
+**Why it's used here:** Resumes are PDF or DOCX files — too large and too binary to store in PostgreSQL. Candidates upload their resume to Azure Blob, and the database stores just the blob path. Recruiters download it via a temporary SAS (Shared Access Signature) URL (a URL that grants one-time access and expires after a short time, protecting the file from unauthorized access).
 
 Company logos are handled the same way.
 
-**Running locally:** Use [MinIO](https://min.io/) — free, open-source, runs in Docker, and supports the same pre-signed URL flow as S3. No AWS account needed.
+**Running locally:** Use [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) — Microsoft's official Azure Blob emulator that runs in Docker and supports the same SAS URL flow as production Azure Blob Storage. No Azure account needed.
 
 ---
 
@@ -120,6 +120,6 @@ Company logos are handled the same way.
 
 ## Interesting Engineering Challenges
 
-- **Resume parsing**: To power skills-based search, the system needs to extract structured skills from an uploaded PDF resume (e.g., detect "Python", "AWS", "SQL"). This requires natural language processing — a non-trivial pipeline that runs as a background job after each resume upload.
+- **Resume parsing**: To power skills-based search, the system needs to extract structured skills from an uploaded PDF resume (e.g., detect "Python", "Azure", "SQL"). This requires natural language processing — a non-trivial pipeline that runs as a background job after each resume upload.
 - **Multi-dimensional ranking**: A job search result should rank listings by a combination of recency (newer is better), relevance (keyword match), and candidate fit (skills overlap). Balancing these three signals to produce a natural-feeling ranking is an ongoing tuning problem.
 - **Preventing spam applications**: Rate limiting by candidate prevents bulk submissions. Duplicate detection (same candidate applying to the same job twice) needs to be enforced at the database level with a unique constraint on `(candidate_id, job_id)` in the `applications` table.

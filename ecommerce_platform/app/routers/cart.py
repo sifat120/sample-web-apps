@@ -37,9 +37,15 @@ router = APIRouter(prefix="/cart", tags=["cart"])
 # Cart auto-expires 24 hours after the last interaction
 CART_TTL_SECONDS = 60 * 60 * 24   # 86400 seconds = 24 hours
 
-# Rate limiting constants
+import os
+
+# Rate limiting constants. The max-per-window can be overridden via the
+# CART_RATE_LIMIT_MAX_REQUESTS env var, which is useful in tests where many
+# parallel workers hit the API from the same loopback IP.
 RATE_LIMIT_WINDOW_SECONDS = 60    # count requests over a 1-minute sliding window
-RATE_LIMIT_MAX_REQUESTS = 100     # max requests per IP per window
+RATE_LIMIT_MAX_REQUESTS = int(
+    os.getenv("CART_RATE_LIMIT_MAX_REQUESTS", "100")
+)     # max requests per IP per window
 
 
 def _build_cart_key(session_id: str) -> str:

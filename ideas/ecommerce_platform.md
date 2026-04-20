@@ -5,7 +5,7 @@
 ## Overview
 A full-featured online storefront where customers browse products, manage carts, and place orders. Sellers can manage inventory and view sales analytics.
 
-Think of it as building Amazon at a smaller scale: customers need to search for products, add them to a cart, and pay — all without two people accidentally buying the last item in stock at the same time.
+Think of it as building a major online retailer at a smaller scale: customers need to search for products, add them to a cart, and pay — all without two people accidentally buying the last item in stock at the same time.
 
 ## Key Features
 - Product catalog with search and filtering
@@ -58,16 +58,16 @@ Think of it as building Amazon at a smaller scale: customers need to search for 
 
 ---
 
-### Object Storage — S3 (production) / MinIO (local)
+### Object Storage — Azure Blob Storage (production) / Azurite (local)
 **What it is:** A service for storing and serving large files (images, videos, documents). See [Object Storage](concepts.md#7-object-storage).
 
-**Why it's used here:** Product images and seller-uploaded media are large binary files. Storing them in a database is inefficient and expensive. S3 stores them cheaply and serves them via URL, often with a CDN in front for fast global delivery. See [CDN](concepts.md#9-the-cdn-content-delivery-network).
+**Why it's used here:** Product images and seller-uploaded media are large binary files. Storing them in a database is inefficient and expensive. Azure Blob Storage stores them cheaply and serves them via URL, often with Azure Front Door in front for fast global delivery. See [CDN](concepts.md#9-the-cdn-content-delivery-network).
 
-**Running locally:** Use [MinIO](https://min.io/) — a free, open-source server that provides the exact same API as S3. You point your code at `localhost:9000` instead of an AWS endpoint and everything works identically. No AWS account or payment needed.
+**Running locally:** Use [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) — Microsoft's official Azure Blob emulator that runs in Docker and provides the same REST API and SAS scheme as production Azure Blob Storage. You point your code at `http://localhost:10000` (using the well-known dev connection string) and everything works identically. No Azure account or payment needed.
 
 ---
 
-### Message Queue — RabbitMQ (local) / SQS (managed cloud)
+### Message Queue — RabbitMQ (local) / CloudAMQP or Azure Service Bus (managed cloud)
 **What it is:** A buffer that lets the web server hand off slow or non-urgent work to background workers. See [The Message Queue](concepts.md#6-the-message-queue).
 
 **Why it's used here:** After an order is placed, several things need to happen — send a confirmation email, notify the warehouse to fulfill it, update sales analytics. None of these should make the customer wait. The server drops a message into the queue ("order #1234 was placed") and immediately confirms the purchase to the customer. Background workers pick up the message and handle each task at their own pace. See [Async Processing](concepts.md#15-async-processing-and-background-jobs).

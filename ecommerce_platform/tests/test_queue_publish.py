@@ -46,21 +46,53 @@ async def _drain_queue() -> None:
             await conn.close()
 
 
-async def _pop_one_message(timeout: float = 5.0) -> dict | None:
-    """Wait up to `timeout` seconds for a single message and return its decoded body."""
+async def _wait_for_order_message(order_id: int, timeout: float = 15.0) -> dict | None:
+    """Pop messages until we find one matching `order_id`.
+
+    With pytest-xdist, multiple workers publish to the same `orders` queue.
+    A naive "pop the next message" would race — worker A might consume
+    worker B's message. Strategy: consume messages without acking; only ack
+    the one with our `order_id`. When the channel closes, RabbitMQ
+    automatically requeues all unacked messages so other workers can still
+    see them.
+    """
     conn = await aio_pika.connect_robust(RABBITMQ_URL)
     try:
+        # Use a dedicated channel; closing it requeues anything we left unacked.
         channel = await conn.channel()
+        # Limit prefetch so a single consumer can't hoard the entire queue.
+        await channel.set_qos(prefetch_count=50)
         queue = await channel.declare_queue(ORDERS_QUEUE, durable=True)
 
+        seen_other_tags: list = []
         deadline = asyncio.get_event_loop().time() + timeout
         while asyncio.get_event_loop().time() < deadline:
             msg = await queue.get(no_ack=False, fail=False)
-            if msg is not None:
-                async with msg.process():
-                    return json.loads(msg.body.decode())
-            # Brief pause so we don't spin
-            await asyncio.sleep(0.1)
+            if msg is None:
+                await asyncio.sleep(0.1)
+                continue
+            try:
+                body = json.loads(msg.body.decode())
+            except Exception:
+                await msg.ack()
+                continue
+            if body.get("order_id") == order_id:
+                await msg.ack()
+                # Closing the channel requeues the rest for other workers.
+                await channel.close()
+                return body
+            # Not ours — keep it unacked so it stays "in flight" for now.
+            seen_other_tags.append(msg)
+            # If we've buffered too many, recycle the channel to release them.
+            if len(seen_other_tags) >= 40:
+                await channel.close()
+                channel = await conn.channel()
+                await channel.set_qos(prefetch_count=50)
+                queue = await channel.declare_queue(ORDERS_QUEUE, durable=True)
+                seen_other_tags.clear()
+        # Timeout — close to release everything we held.
+        if not channel.is_closed:
+            await channel.close()
         return None
     finally:
         if not conn.is_closed:
@@ -68,6 +100,7 @@ async def _pop_one_message(timeout: float = 5.0) -> dict | None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group(name="rabbitmq")
 async def test_checkout_publishes_order_created_event(client: AsyncClient):
     # ---- Arrange ----
     # Create the user + product the test needs
@@ -102,8 +135,8 @@ async def test_checkout_publishes_order_created_event(client: AsyncClient):
         json={"product_id": product_id, "quantity": 3},
     )
 
-    # Make sure the queue is empty before we trigger checkout — otherwise
-    # we might consume a stale message from an earlier run.
+    # Drain the queue first; safe under xdist because this test is in the
+    # "rabbitmq" xdist_group which serializes RabbitMQ-touching tests.
     await _drain_queue()
 
     # ---- Act ----
@@ -115,7 +148,7 @@ async def test_checkout_publishes_order_created_event(client: AsyncClient):
     order_id = checkout.json()["id"]
 
     # ---- Assert ----
-    message = await _pop_one_message(timeout=5.0)
+    message = await _wait_for_order_message(order_id, timeout=10.0)
     assert message is not None, "Expected an order.created message on the queue"
 
     assert message["event"] == "order.created"

@@ -6,7 +6,7 @@ every backing service in one shot:
 
   PostgreSQL   → create user, create product, persist order rows
   Elasticsearch → index product, search & retrieve it
-  MinIO/S3     → upload an image, generate a pre-signed download URL
+  Azurite      → upload an image, generate a SAS download URL
   Valkey       → add to cart (hash + TTL), cache product detail, clear cart
   RabbitMQ     → publish "order.created" message after successful checkout
 
@@ -24,7 +24,9 @@ import httpx
 import pytest
 from httpx import AsyncClient
 
+from app.config import settings
 from app.queue import ORDERS_QUEUE
+from app.search import PRODUCTS_INDEX
 
 
 # Tiny valid PNG so the image-upload step has real bytes to send.
@@ -38,6 +40,7 @@ TINY_PNG_BYTES = bytes.fromhex(
 
 
 @pytest.mark.asyncio
+@pytest.mark.xdist_group(name="rabbitmq")
 async def test_full_purchase_flow_end_to_end(client: AsyncClient, redis_client):
     # ===============================================================
     # Step 1 — Register a user (PostgreSQL)
@@ -67,7 +70,7 @@ async def test_full_purchase_flow_end_to_end(client: AsyncClient, redis_client):
     assert product["stock"] == 3
 
     # ===============================================================
-    # Step 3 — Upload a product image (MinIO/S3) and verify roundtrip
+    # Step 3 — Upload a product image (Azure Blob via Azurite) and verify roundtrip
     # ===============================================================
     upload = await client.post(
         f"/products/{product_id}/image",
@@ -87,7 +90,10 @@ async def test_full_purchase_flow_end_to_end(client: AsyncClient, redis_client):
     # ===============================================================
     # Step 4 — Search finds the new product (Elasticsearch)
     # ===============================================================
-    # Indexing is async — poll briefly until the new doc is searchable.
+    # Indexing is async — force a refresh so the new doc is searchable
+    # immediately, then poll briefly as a safety net.
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        await http.post(f"{settings.elasticsearch_url}/{PRODUCTS_INDEX}/_refresh")
     found = False
     for _ in range(20):
         search = await client.get(
@@ -137,7 +143,9 @@ async def test_full_purchase_flow_end_to_end(client: AsyncClient, redis_client):
     assert cart_ttl > 0
 
     # ===============================================================
-    # Step 7 — Drain the orders queue so we can assert on a fresh message
+    # Step 7 — Drain the orders queue so we can assert on a fresh message.
+    # Safe under xdist because this test is in the "rabbitmq" xdist_group
+    # which serializes all RabbitMQ-touching tests onto a single worker.
     # ===============================================================
     drain_conn = await aio_pika.connect_robust("amqp://guest:guest@localhost:5672/")
     try:
@@ -188,21 +196,43 @@ async def test_full_purchase_flow_end_to_end(client: AsyncClient, redis_client):
     assert fetched.status_code == 200
     assert fetched.json()["id"] == order_id
 
-    # Pop the message off the queue and verify its contents
+    # Pop the message off the queue and verify its contents. Under xdist,
+    # other workers may publish to the same queue concurrently — only ack
+    # the message that matches our order_id; leave others unacked so they
+    # are requeued (automatically) when this channel closes.
     consume_conn = await aio_pika.connect_robust("amqp://guest:guest@localhost:5672/")
     try:
         ch = await consume_conn.channel()
+        await ch.set_qos(prefetch_count=50)
         q = await ch.declare_queue(ORDERS_QUEUE, durable=True)
 
         message_body = None
-        deadline = asyncio.get_event_loop().time() + 5.0
+        deadline = asyncio.get_event_loop().time() + 15.0
+        held = 0
         while asyncio.get_event_loop().time() < deadline:
             msg = await q.get(no_ack=False, fail=False)
-            if msg is not None:
-                async with msg.process():
-                    message_body = json.loads(msg.body.decode())
+            if msg is None:
+                await asyncio.sleep(0.1)
+                continue
+            try:
+                body = json.loads(msg.body.decode())
+            except Exception:
+                await msg.ack()
+                continue
+            if body.get("order_id") == order_id:
+                await msg.ack()
+                message_body = body
                 break
-            await asyncio.sleep(0.1)
+            # Not ours — leave unacked. RabbitMQ requeues it when the channel closes.
+            held += 1
+            if held >= 40:
+                await ch.close()
+                ch = await consume_conn.channel()
+                await ch.set_qos(prefetch_count=50)
+                q = await ch.declare_queue(ORDERS_QUEUE, durable=True)
+                held = 0
+        if not ch.is_closed:
+            await ch.close()
     finally:
         if not consume_conn.is_closed:
             await consume_conn.close()

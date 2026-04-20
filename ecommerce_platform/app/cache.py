@@ -19,7 +19,7 @@ What is Valkey?
   the wire protocol is identical.
 
 Local:      Valkey running in Docker (see docker-compose.yml)
-Production: AWS ElastiCache for Valkey, Upstash, or Aiven for Valkey
+Production: Azure Cache for Redis, Upstash, or Aiven for Valkey
             (see .env.example for connection string examples)
 
 This module uses the "singleton" pattern: the Valkey connection is

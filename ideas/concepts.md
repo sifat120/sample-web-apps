@@ -151,7 +151,7 @@ Web Server ──► Queue ──► Worker Process
 **Common tools:**
 - **RabbitMQ** — general-purpose task queues
 - **Apache Kafka** — built for extremely high volumes; every event is durably stored and can be replayed; multiple consumers can read the same events independently
-- **AWS SQS** — a managed (hosted) queue; minimal setup and maintenance
+- **Azure Service Bus** — a managed (hosted) queue; minimal setup and maintenance
 
 **Best for:** sending emails/SMS, processing uploads, updating analytics, notifying other services of events.
 
@@ -163,7 +163,7 @@ A **database** stores structured records (rows, documents). But what about large
 
 **Object storage** is a service designed for exactly this: storing and retrieving large files cheaply and reliably. You upload a file and get back a URL to retrieve it later.
 
-**AWS S3** (Simple Storage Service) is the most widely used object storage. Equivalents include Google Cloud Storage and Azure Blob Storage. For self-hosted setups, **MinIO** is a popular open-source alternative.
+**Azure Blob Storage** is Microsoft's object storage service. Equivalents include Google Cloud Storage on GCP. For local development, **Azurite** (Microsoft's official emulator) implements the same Blob REST API and SAS scheme.
 
 Objects (files) are organized into **buckets** (like top-level folders). Each object has a unique key (filename/path) within its bucket.
 

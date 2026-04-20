@@ -48,7 +48,7 @@ class Product(Base):
     # Which seller owns this product. Optional — nullable foreign key.
     seller_id: Mapped[Optional[int]] = mapped_column(Integer)
 
-    # Path to the product image in object storage (MinIO/S3), e.g.:
+    # Path to the product image in object storage (Azurite/Azure Blob), e.g.:
     # "products/7/photo.jpg". The actual file lives in object storage;
     # this string is used to generate a pre-signed download URL.
     image_url: Mapped[Optional[str]] = mapped_column(String(500))

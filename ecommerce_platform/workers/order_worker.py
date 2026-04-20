@@ -54,7 +54,7 @@ async def handle_order_created(payload: dict) -> None:
     Handle a single "order.created" event.
 
     In a real system, this function would:
-      - Call an email service (e.g. SendGrid or AWS SES) to send the receipt
+      - Call an email service (e.g. SendGrid or Azure Communication Services) to send the receipt
       - Call a warehouse API to trigger fulfillment
       - Update an analytics database with the sale
 

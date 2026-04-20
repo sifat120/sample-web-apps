@@ -78,12 +78,12 @@ This also means multiple systems can independently consume the same stream of ev
 
 ---
 
-### Object Storage — S3 (production) / MinIO (local)
+### Object Storage — Azure Blob Storage (production) / Azurite (local)
 **What it is:** A service for storing and retrieving large files. See [Object Storage](concepts.md#7-object-storage).
 
-**Why it's used here:** When a user exports a report as CSV or PDF, generating it is slow and the file can be large. The server generates the file asynchronously (in the background), uploads it to S3 (or MinIO locally), and emails the user a download link when it's ready. This way the export doesn't block the user's browser. See [Async Processing](concepts.md#15-async-processing-and-background-jobs).
+**Why it's used here:** When a user exports a report as CSV or PDF, generating it is slow and the file can be large. The server generates the file asynchronously (in the background), uploads it to Azure Blob (or Azurite locally), and emails the user a download link when it's ready. This way the export doesn't block the user's browser. See [Async Processing](concepts.md#15-async-processing-and-background-jobs).
 
-**Running locally:** Use [MinIO](https://min.io/) — free, open-source, runs in Docker, fully S3-compatible.
+**Running locally:** Use [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) — Microsoft's official Azure Blob Storage emulator that runs in Docker.
 
 ---
 

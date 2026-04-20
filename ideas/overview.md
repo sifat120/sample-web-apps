@@ -31,8 +31,8 @@ An online storefront where customers browse products, manage carts, and place or
 | Primary DB | PostgreSQL | Products, orders, inventory — ACID transactions for checkout |
 | Cache | Redis | Cart sessions, product page cache, rate limiting |
 | Search | Elasticsearch | Full-text product search, autocomplete |
-| Object Storage | S3 / MinIO (local) | Product images and media |
-| Queue | RabbitMQ (local) / SQS (cloud) | Async post-order tasks (email, warehouse notify) |
+| Object Storage | Azure Blob / Azurite (local) | Product images and media |
+| Queue | RabbitMQ (local) / CloudAMQP (cloud) | Async post-order tasks (email, warehouse notify) |
 
 **Key challenge:** Preventing oversell during flash sales using optimistic locking or Redis atomic `DECR`.
 
@@ -47,7 +47,7 @@ A messaging platform (à la Slack/Discord) for direct messages, group channels, 
 |---|---|---|
 | Primary DB | MongoDB | Messages and channels — flexible document schema |
 | Cache / Pub-Sub | Redis | Fan-out via Pub/Sub, presence tracking, unread counts |
-| Object Storage | S3 / MinIO (local) | Uploaded files, images, voice messages |
+| Object Storage | Azure Blob / Azurite (local) | Uploaded files, images, voice messages |
 | Transport | WebSockets | Stateful real-time connections per client |
 
 **Key challenge:** Scaling WebSocket servers horizontally using Redis as the cross-instance message bus.
@@ -64,7 +64,7 @@ A high-throughput service mapping short codes to long URLs. Reads (redirects) va
 | Primary DB | PostgreSQL | URL mappings, expiration dates, owners |
 | Cache | Redis | Redirect cache (near 100% hit rate), rate limiting, ID generation via `INCR` |
 | Analytics DB | ClickHouse | Aggregate click events for reporting |
-| Queue | Kafka (local) / SQS (cloud) | Async click event pipeline to analytics |
+| Queue | Kafka (local) / Azure Event Hubs (cloud) | Async click event pipeline to analytics |
 
 **Key challenge:** Sub-millisecond redirect latency — a single Redis round trip should satisfy nearly all requests.
 
@@ -81,7 +81,7 @@ A SaaS platform where businesses embed a JS snippet to track user events and vis
 | Time-Series DB | ClickHouse | Columnar storage for fast aggregation over billions of rows |
 | Cache | Redis | Real-time visitor counters, dashboard query cache, rate limiting |
 | Metadata DB | PostgreSQL | Sites, users, API keys, saved reports |
-| Object Storage | S3 / MinIO (local) | Exported CSV/PDF reports |
+| Object Storage | Azure Blob / Azurite (local) | Exported CSV/PDF reports |
 
 **Key challenge:** Exactly-once delivery from Kafka to ClickHouse using deduplication keys.
 
@@ -97,7 +97,7 @@ A booking platform (à la OpenTable) where diners check real-time availability a
 | Primary DB | PostgreSQL | Restaurants, tables, time slots, reservations — `SELECT FOR UPDATE` for booking |
 | Cache | Redis | Availability cache, search result cache, distributed booking lock |
 | Search | Elasticsearch / PostGIS | Geo-distance restaurant search, cuisine/rating filters |
-| Queue | RabbitMQ (local) / SQS (cloud) | Async reminder notifications (24h, 2h before reservation) |
+| Queue | RabbitMQ (local) / CloudAMQP (cloud) | Async reminder notifications (24h, 2h before reservation) |
 
 **Key challenge:** Preventing double-booking under concurrent requests using a Redis distributed lock around the booking transaction.
 
@@ -112,7 +112,7 @@ A content-sharing platform (à la Twitter/Instagram) with personalized home feed
 |---|---|---|
 | Primary DB | PostgreSQL | Users, posts, follows, likes — source of truth |
 | Cache | Redis | Pre-computed feed sorted sets, like/comment counters, trending hashtags, sessions |
-| Object Storage | S3 / MinIO (local); CDN optional | Images and videos served globally at low latency |
+| Object Storage | Azure Blob / Azurite (local); Azure Front Door / CDN optional | Images and videos served globally at low latency |
 | Search | Elasticsearch | User and hashtag search |
 | Event Bus | Kafka | Fan-out post events to feed, notification, and search indexer services |
 
@@ -130,7 +130,7 @@ A two-sided marketplace where companies post jobs, candidates apply, and recruit
 | Primary DB | PostgreSQL | Companies, jobs, candidates, applications, pipeline stages |
 | Cache | Redis | Listing cache, search result cache, session storage, rate limiting |
 | Search | Elasticsearch | Full-text job search, geo-distance, skills-based candidate search |
-| Object Storage | S3 / MinIO (local) | Resumes (PDF/DOCX) and company logos |
+| Object Storage | Azure Blob / Azurite (local) | Resumes (PDF/DOCX) and company logos |
 | Job Queue | Sidekiq / BullMQ | Status-change emails, listing expiry, recommendation scoring |
 
 **Key challenge:** Ranking search results by recency, relevance, and candidate–job fit simultaneously.
@@ -152,7 +152,7 @@ The recommended approach is **Docker + Docker Compose**: instead of installing e
 | **Apache Kafka** | Docker (`confluentinc/cp-kafka` or `bitnami/kafka`) | Free, open-source; needs a ZooKeeper or KRaft sidecar |
 | **RabbitMQ** | Docker (`rabbitmq` image) | Free, open-source |
 | **ClickHouse** | Docker (`clickhouse/clickhouse-server` image) | Free, open-source |
-| **MinIO** *(local S3 replacement)* | Docker (`minio/minio` image) | Free, open-source; fully S3-compatible API — code written for S3 works against MinIO unchanged |
+| **Azurite** *(local Azure Blob Storage emulator)* | Docker (`mcr.microsoft.com/azure-storage/azurite` image) | Microsoft's official emulator; implements the same Blob REST API and SAS scheme — code written for Azure Blob works against Azurite unchanged |
 | **Sidekiq** | Ruby gem — runs in-process | Free, open-source |
 | **BullMQ** | npm package — runs in-process | Free, open-source |
 
@@ -162,9 +162,9 @@ Two services in these app ideas are cloud-hosted products. Neither is required f
 
 | Cloud Service | Local Replacement | How |
 |---|---|---|
-| **AWS S3** | **MinIO** | S3-compatible API; swap the endpoint URL in your config |
-| **AWS SQS** | **RabbitMQ** | Both are message queues; RabbitMQ runs locally in Docker |
-| **CDN** | *(skip locally)* | Serve files directly from MinIO or your local server; a CDN is only needed for global production traffic |
+| **Azure Blob Storage** | **Azurite** | Microsoft's official emulator; same SDK and REST API |
+| **Azure Service Bus** | **RabbitMQ** | Both are message queues; RabbitMQ runs locally in Docker (note: switching the SDK from `pika` to `azure-servicebus` is required for the cloud side) |
+| **Azure Front Door / CDN** | *(skip locally)* | Serve files directly from Azurite or your local server; a CDN is only needed for global production traffic |
 
 ### Example `docker-compose.yml` skeleton
 
@@ -182,13 +182,10 @@ services:
     image: redis:7
     ports: ["6379:6379"]
 
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports: ["9000:9000", "9001:9001"]
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    command: "azurite-blob --blobHost 0.0.0.0"
+    ports: ["10000:10000"]
 
   elasticsearch:
     image: elasticsearch:8.13.0
@@ -231,13 +228,13 @@ Add or remove services based on which app you're building. Start everything with
 |---|---|---|
 | **Apache Kafka** | Yes (Docker) | High-throughput durable event streaming, fan-out to multiple consumers |
 | **RabbitMQ** | Yes (Docker) | Task queues, routing, work distribution |
-| **AWS SQS** | No *(use RabbitMQ locally)* | Managed cloud queue with minimal ops overhead |
+| **Azure Service Bus** | No *(use RabbitMQ locally)* | Managed cloud queue with minimal ops overhead |
 
 ### Object Storage
 | Technology | Local? | Best For |
 |---|---|---|
-| **MinIO** | Yes (Docker) | Local development — free, open-source, fully S3-compatible |
-| **AWS S3** | No *(use MinIO locally)* | Production object storage; also GCS and Azure Blob Storage are equivalent cloud options |
+| **Azurite** | Yes (Docker) | Local development — Microsoft's official Azure Blob Storage emulator |
+| **Azure Blob Storage** | No *(use Azurite locally)* | Production object storage; Google Cloud Storage is an equivalent option on GCP |
 
 ### Further Reading
 - PostgreSQL documentation — https://www.postgresql.org/docs/
